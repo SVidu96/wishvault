@@ -7,6 +7,7 @@ import 'widgets/auth_wrapper.dart';
 import 'screens/media_item_detail_screen.dart';
 import 'services/search_service.dart';
 import 'core/config/env.dart';
+import 'models/wishlist_model.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -56,17 +57,23 @@ class _MyAppState extends State<MyApp> {
   void _handleDeepLink(Uri uri) async {
     print('Incoming Deep Link: $uri');
 
-    // Pattern: https://[domain]/movie?id={tmdb_id}
-    if (uri.host == Env.appDomain && uri.path.contains('movie')) {
+    // Production: https://[domain]/movie?id=xxx&type=xxx
+    // Testing: wishvault://movie?id=xxx&type=xxx
+    bool isWebLink = uri.host == Env.appDomain && uri.path.contains('movie');
+    bool isCustomScheme = uri.scheme == 'wishvault' && uri.host == 'movie';
+
+    if (isWebLink || isCustomScheme) {
       final String? id = uri.queryParameters['id'];
+      final String? typeStr = uri.queryParameters['type'];
+
       if (id != null) {
-        _navigateToMovie(id);
+        _navigateToMovie(id, WishListType.fromString(typeStr ?? 'movies'));
       }
     }
   }
 
-  Future<void> _navigateToMovie(String id) async {
-    final searchService = MovieSearchService();
+  Future<void> _navigateToMovie(String id, WishListType type) async {
+    final searchService = SearchServiceFactory.getService(type);
     final media = await searchService.getDetails(id);
 
     if (media != null && navigatorKey.currentState != null) {

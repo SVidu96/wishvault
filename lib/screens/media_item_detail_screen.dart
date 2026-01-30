@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
@@ -12,9 +11,10 @@ import '../services/wishlist_item_service.dart';
 import '../services/search_service.dart';
 import '../services/wishlist_service.dart';
 import '../core/config/env.dart';
+import '../core/registry/media_item_registry.dart';
 
 class MediaItemDetailScreen extends StatefulWidget {
-  final WishListItemModel? item; // Null if opened from search or deep link
+  final WishListItemModel? item;
   final MediaItemModel media;
 
   const MediaItemDetailScreen({super.key, this.item, required this.media});
@@ -30,51 +30,40 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
   late double _currentRating;
   final TextEditingController _reviewController = TextEditingController();
   bool _isSaving = false;
-  Map<String, List<WatchProvider>> _watchProviders = {};
-  bool _isLoadingProviders = true;
+  Map<String, dynamic> _dynamicContent = {};
+  bool _isLoadingContent = true;
   bool _isInMyList = false;
-  WishListItemModel? _myListItem;
+  late MediaItemTypeConfig _config;
 
   @override
   void initState() {
     super.initState();
-    _myListItem = widget.item;
+    _config = MediaItemRegistry.getConfig(widget.media.type);
     _isInMyList = widget.item != null;
     _currentRating = widget.item?.rating ?? 0.0;
     _reviewController.text = widget.item?.review ?? '';
-    _loadWatchProviders();
-    _checkIfInMyList();
+    _loadDynamicContent();
   }
 
-  Future<void> _checkIfInMyList() async {
-    if (_isInMyList) return;
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    // We can't easily check all lists, but we can check if it's in ANY list for this user.
-    // For now, if it's passed as null, we'll let it stay as "Add to List".
-    // A more thorough check could be added to WishListItemService.
-  }
-
-  Future<void> _loadWatchProviders() async {
-    final service = MovieSearchService();
-    final providers = await service.getWatchProviders(widget.media.apiId);
+  Future<void> _loadDynamicContent() async {
+    final service = SearchServiceFactory.getService(
+      WishListType.fromString(widget.media.type),
+    );
+    final content = await service.getDynamicContent(widget.media.apiId);
     if (mounted) {
       setState(() {
-        _watchProviders = providers;
-        _isLoadingProviders = false;
+        _dynamicContent = content;
+        _isLoadingContent = false;
       });
     }
   }
 
   Future<void> _shareMovie() async {
     final String shareUrl =
-        '${Env.movieDetailBaseUrl}?id=${widget.media.apiId}';
+        '${Env.movieDetailBaseUrl}?id=${widget.media.apiId}&type=${widget.media.type}';
     final String text =
-        'Check out this movie: ${widget.media.title}\n$shareUrl';
-
-    await Share.share(text, subject: 'WishVault Movie Share');
+        'Check out this ${widget.media.type}: ${widget.media.title}\n$shareUrl';
+    await Share.share(text, subject: 'WishVault Share');
   }
 
   Future<void> _addToMyList() async {
@@ -84,21 +73,20 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
     setState(() => _isSaving = true);
 
     try {
-      // 1. Find if user has a Movies list
-      WishListModel? moviesList = await _wishListService.getFirstWishListByType(
+      final type = WishListType.fromString(widget.media.type);
+      WishListModel? targetList = await _wishListService.getFirstWishListByType(
         user.uid,
-        WishListType.movies,
+        type,
       );
 
-      // 2. If no list, prompt to create
-      if (moviesList == null) {
+      if (targetList == null) {
         if (mounted) {
           final bool? create = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('New Movie List'),
-              content: const Text(
-                'You don\'t have a Movie list yet. Create one now?',
+              title: Text('New ${type.displayName} List'),
+              content: Text(
+                'You don\'t have a ${type.displayName} list yet. Create one now?',
               ),
               actions: [
                 TextButton(
@@ -114,14 +102,14 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
           );
 
           if (create == true) {
-            moviesList = WishListModel(
+            targetList = WishListModel(
               id: const Uuid().v4(),
               uid: user.uid,
-              title: 'My Movies',
-              type: WishListType.movies,
+              title: 'My ${type.displayName}',
+              type: type,
               createdAt: DateTime.now(),
             );
-            await _wishListService.createWishList(moviesList);
+            await _wishListService.createWishList(targetList);
           } else {
             setState(() => _isSaving = false);
             return;
@@ -129,16 +117,14 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
         }
       }
 
-      if (moviesList != null) {
-        await _itemService.addItemToList(user.uid, moviesList.id, widget.media);
+      if (targetList != null) {
+        await _itemService.addItemToList(user.uid, targetList.id, widget.media);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Added to your Movie list!')),
+            SnackBar(content: Text('Added to your ${type.displayName} list!')),
           );
           setState(() {
             _isInMyList = true;
-            // We'd need to fetch the newly created WishListItemModel to get the true ID if we wanted to allow editing immediately.
-            // For now, simplicity.
           });
         }
       }
@@ -159,67 +145,12 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
     }
   }
 
-  Future<void> _launchUrl(String urlString) async {
-    final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not launch deep link')));
-      }
-    }
-  }
-
-  Future<void> _updateRating(double rating) async {
-    if (!_isInMyList || _myListItem == null) return;
-
-    setState(() => _isSaving = true);
-    try {
-      await _itemService.updateItemDetails(_myListItem!.id, rating: rating);
-      setState(() => _currentRating = rating);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update rating: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  Future<void> _saveReview() async {
-    if (!_isInMyList || _myListItem == null) return;
-
-    setState(() => _isSaving = true);
-    try {
-      await _itemService.updateItemDetails(
-        _myListItem!.id,
-        review: _reviewController.text,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Review saved!')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save review: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final overview =
-        widget.media.extraData?['overview'] ?? 'No description available.';
-    final releaseDate = widget.media.extraData?['release_date'] ?? 'Unknown';
-    final voteAverage =
-        widget.media.extraData?['vote_average']?.toString() ?? 'N/A';
+        widget.media.extraData?['overview'] ??
+        widget.media.extraData?['volumeInfo']?['description'] ??
+        'No description available.';
 
     return Scaffold(
       body: CustomScrollView(
@@ -273,17 +204,17 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                       color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _buildInfoBadge(Icons.calendar_today, releaseDate),
-                      const SizedBox(width: 12),
-                      _buildInfoBadge(Icons.star, '$voteAverage (TMDB)'),
-                    ],
+                  const SizedBox(height: 12),
+
+                  // DYNAMIC BADGES (from Registry)
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: _config.buildBadges(context, widget.media),
                   ),
+
                   const SizedBox(height: 24),
 
-                  // Add to List Button if not already in list
                   if (!_isInMyList)
                     SizedBox(
                       width: double.infinity,
@@ -304,17 +235,17 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                       ),
                     ),
 
-                  const SizedBox(height: 24),
-
-                  // Categorized Watch Providers
-                  if (_isLoadingProviders)
-                    const Center(child: CircularProgressIndicator())
+                  // DYNAMIC SECTIONS (e.g., streaming providers)
+                  if (_isLoadingContent)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
                   else
-                    ..._buildWatchProviderSections(),
+                    ..._config.buildCustomSections(context, _dynamicContent),
 
                   const SizedBox(height: 32),
 
-                  // Personal Rating (Only if in list)
                   if (_isInMyList) ...[
                     Text(
                       'Your Rating',
@@ -336,14 +267,21 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                         ),
                         itemBuilder: (context, _) =>
                             const Icon(Icons.star_rounded, color: Colors.amber),
-                        onRatingUpdate: _updateRating,
+                        onRatingUpdate: (rating) async {
+                          if (widget.item != null) {
+                            await _itemService.updateItemDetails(
+                              widget.item!.id,
+                              rating: rating,
+                            );
+                          }
+                        },
                       ),
                     ),
                   ],
 
                   const SizedBox(height: 32),
                   Text(
-                    'Overview',
+                    'Description',
                     style: GoogleFonts.outfit(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -373,7 +311,7 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                       controller: _reviewController,
                       maxLines: 5,
                       decoration: InputDecoration(
-                        hintText: 'Add your personal review or notes here...',
+                        hintText: 'Add your personal notes here...',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
@@ -387,7 +325,17 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _isSaving ? null : _saveReview,
+                        onPressed: () async {
+                          if (widget.item != null) {
+                            await _itemService.updateItemDetails(
+                              widget.item!.id,
+                              review: _reviewController.text,
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Saved!')),
+                            );
+                          }
+                        },
                         icon: const Icon(Icons.save_rounded),
                         label: const Text('Save Notes'),
                         style: ElevatedButton.styleFrom(
@@ -402,107 +350,6 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                   const SizedBox(height: 50),
                 ],
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildWatchProviderSections() {
-    List<Widget> sections = [];
-    _watchProviders.forEach((category, providers) {
-      if (providers.isNotEmpty) {
-        sections.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  category,
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: providers
-                      .map((p) => _buildProviderIcon(p))
-                      .toList(),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    });
-
-    if (sections.isEmpty && !_isLoadingProviders) {
-      sections.add(
-        Text(
-          'Not available to stream currently',
-          style: GoogleFonts.roboto(color: Colors.grey),
-        ),
-      );
-    }
-    return sections;
-  }
-
-  Widget _buildProviderIcon(WatchProvider provider) {
-    return GestureDetector(
-      onTap: () => _launchUrl(provider.tmdbLink),
-      child: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: Colors.grey[200],
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            provider.logoUrl,
-            errorBuilder: (context, error, stackTrace) =>
-                const Icon(Icons.broken_image, size: 20),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoBadge(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: Theme.of(context).colorScheme.onSecondaryContainer,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: GoogleFonts.roboto(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
             ),
           ),
         ],
