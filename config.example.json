@@ -1,0 +1,6 @@
+{
+    "TMDB_V3_KEY": "YOUR_TMDB_V3_KEY",
+    "TMDB_V4_TOKEN": "YOUR_TMDB_V4_TOKEN",
+    "APP_DOMAIN": "yourdomain.vercel.app",
+    "APP_SCHEME": "https"
+}
