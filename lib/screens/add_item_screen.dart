@@ -145,7 +145,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                                         const Icon(Icons.broken_image),
                                   )
                                 : Icon(
-                                    MediaItemRegistry.getConfig(item.type).icon,
+                                    MediaRegistry.getDefinitionByString(
+                                      item.type,
+                                    ).icon,
                                   ),
                           ),
                         ),

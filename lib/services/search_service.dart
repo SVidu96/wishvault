@@ -2,6 +2,7 @@ import '../models/media_item_model.dart';
 import '../models/wishlist_model.dart';
 import '../core/config/env.dart';
 import '../models/watch_provider_model.dart';
+import '../core/registry/media_item_registry.dart';
 import 'package:tmdb_api/tmdb_api.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -318,16 +319,7 @@ class BookSearchService implements SearchService {
 
 class SearchServiceFactory {
   static SearchService getService(WishListType type) {
-    switch (type) {
-      case WishListType.movies:
-        return MovieSearchService();
-      case WishListType.tvSeries:
-        return TvSearchService();
-      case WishListType.books:
-        return BookSearchService();
-      default:
-        return DefaultSearchService();
-    }
+    return MediaRegistry.getDefinition(type).searchService;
   }
 }
 

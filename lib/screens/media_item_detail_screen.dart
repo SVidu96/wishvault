@@ -33,12 +33,12 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
   Map<String, dynamic> _dynamicContent = {};
   bool _isLoadingContent = true;
   bool _isInMyList = false;
-  late MediaItemTypeConfig _config;
+  late MediaDefinition _definition;
 
   @override
   void initState() {
     super.initState();
-    _config = MediaItemRegistry.getConfig(widget.media.type);
+    _definition = MediaRegistry.getDefinitionByString(widget.media.type);
     _isInMyList = widget.item != null;
     _currentRating = widget.item?.rating ?? 0.0;
     _reviewController.text = widget.item?.review ?? '';
@@ -46,10 +46,9 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
   }
 
   Future<void> _loadDynamicContent() async {
-    final service = SearchServiceFactory.getService(
-      WishListType.fromString(widget.media.type),
+    final content = await _definition.searchService.getDynamicContent(
+      widget.media.apiId,
     );
-    final content = await service.getDynamicContent(widget.media.apiId);
     if (mounted) {
       setState(() {
         _dynamicContent = content;
@@ -206,11 +205,11 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // DYNAMIC BADGES (from Registry)
+                  // DYNAMIC BADGES (from Definition)
                   Wrap(
                     spacing: 12,
                     runSpacing: 8,
-                    children: _config.buildBadges(context, widget.media),
+                    children: _definition.buildBadges(context, widget.media),
                   ),
 
                   const SizedBox(height: 24),
@@ -235,14 +234,17 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                       ),
                     ),
 
-                  // DYNAMIC SECTIONS (e.g., streaming providers)
+                  // DYNAMIC SECTIONS (from Definition)
                   if (_isLoadingContent)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 20),
                       child: Center(child: CircularProgressIndicator()),
                     )
                   else
-                    ..._config.buildCustomSections(context, _dynamicContent),
+                    ..._definition.buildCustomSections(
+                      context,
+                      _dynamicContent,
+                    ),
 
                   const SizedBox(height: 32),
 

@@ -10,12 +10,23 @@ import 'screens/media_item_detail_screen.dart';
 import 'screens/wishlist_detail_screen.dart';
 import 'core/config/env.dart';
 import 'models/wishlist_model.dart';
+import 'core/registry/media_item_registry.dart';
+import 'core/registry/media_definitions.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+void _initRegistry() {
+  MediaRegistry.register(MovieDefinition());
+  MediaRegistry.register(TvDefinition());
+  MediaRegistry.register(BookDefinition());
+  MediaRegistry.register(PlaceDefinition());
+  MediaRegistry.register(CustomDefinition());
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  _initRegistry();
   runApp(const MyApp());
 }
 
