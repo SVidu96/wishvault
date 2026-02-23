@@ -60,7 +60,7 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
 
   Future<void> _shareMovie() async {
     final String shareUrl =
-        '${Env.movieDetailBaseUrl}?id=${widget.media.apiId}&type=${widget.media.type}';
+        '${Env.itemDetailBaseUrl}?id=${widget.media.apiId}&type=${widget.media.type}';
     final String text =
         'Check out this ${widget.media.type}: ${widget.media.title}\n$shareUrl';
     await Share.share(text, subject: 'WishVault Share');

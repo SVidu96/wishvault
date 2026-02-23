@@ -4,6 +4,7 @@ import '../models/wishlist_model.dart';
 import '../models/media_item_model.dart';
 import '../services/search_service.dart';
 import '../services/wishlist_item_service.dart';
+import '../core/registry/media_item_registry.dart';
 import 'media_item_detail_screen.dart';
 
 class AddItemScreen extends StatefulWidget {
@@ -143,7 +144,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                                     errorBuilder: (context, e, s) =>
                                         const Icon(Icons.broken_image),
                                   )
-                                : const Icon(Icons.movie_outlined),
+                                : Icon(
+                                    MediaItemRegistry.getConfig(item.type).icon,
+                                  ),
                           ),
                         ),
                         title: Text(

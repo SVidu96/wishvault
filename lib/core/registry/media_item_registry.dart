@@ -40,14 +40,22 @@ class MovieTypeConfig extends MediaItemTypeConfig {
     BuildContext context,
     Map<String, dynamic> extraContent,
   ) {
-    final providers =
-        extraContent['watch_providers'] as Map<String, List<WatchProvider>>?;
-    if (providers == null) return [];
+    final providersRaw = extraContent['watch_providers'];
+    if (providersRaw == null || providersRaw is! Map) return [];
 
+    // Safe cast the map to handle potential dynamic type issues
+    final Map providers = providersRaw;
     List<Widget> sections = [];
+
     providers.forEach((category, list) {
-      if (list.isNotEmpty) {
-        sections.add(_buildProviderSection(context, category, list));
+      if (list is List && list.isNotEmpty) {
+        // Ensure the list elements are actually WatchProviders
+        final watchList = list.whereType<WatchProvider>().toList();
+        if (watchList.isNotEmpty) {
+          sections.add(
+            _buildProviderSection(context, category.toString(), watchList),
+          );
+        }
       }
     });
     return sections;
@@ -86,12 +94,21 @@ class BookTypeConfig extends MediaItemTypeConfig {
     final info = media.extraData?['volumeInfo'] ?? {};
     final pageCount = info['pageCount']?.toString();
     final categories = (info['categories'] as List?)?.first?.toString();
+    final publishedDate = info['publishedDate']?.toString();
+    final rating = info['averageRating']?.toString();
 
     return [
+      if (publishedDate != null)
+        _buildBadge(
+          context,
+          Icons.calendar_today_rounded,
+          publishedDate.split('-').first,
+        ),
       if (pageCount != null)
         _buildBadge(context, Icons.menu_book_rounded, '$pageCount Pages'),
       if (categories != null)
         _buildBadge(context, Icons.category_rounded, categories),
+      if (rating != null) _buildBadge(context, Icons.star_rounded, '$rating/5'),
     ];
   }
 
@@ -99,7 +116,19 @@ class BookTypeConfig extends MediaItemTypeConfig {
   List<Widget> buildCustomSections(
     BuildContext context,
     Map<String, dynamic> extraContent,
-  ) => [];
+  ) {
+    final providers =
+        extraContent['book_providers'] as Map<String, List<WatchProvider>>?;
+    if (providers == null) return [];
+
+    List<Widget> sections = [];
+    providers.forEach((category, list) {
+      if (list.isNotEmpty) {
+        sections.add(_buildProviderSection(context, category, list));
+      }
+    });
+    return sections;
+  }
 }
 
 /// A fallback for Custom User-defined types
@@ -153,13 +182,32 @@ Widget _buildProviderSection(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
+        Row(
+          children: [
+            Container(
+              width: 4,
+              height: 16,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title.toUpperCase(),
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         Wrap(
-          spacing: 12,
+          spacing: 20,
+          runSpacing: 20,
           children: providers
               .map((p) => _buildProviderIcon(context, p))
               .toList(),
@@ -170,21 +218,66 @@ Widget _buildProviderSection(
 }
 
 Widget _buildProviderIcon(BuildContext context, WatchProvider p) {
-  return GestureDetector(
+  return InkWell(
     onTap: () async {
       final uri = Uri.parse(p.tmdbLink);
-      if (await canLaunchUrl(uri)) await launchUrl(uri);
+      try {
+        // On modern Android, canLaunchUrl can be finicky even with manifest queries.
+        // We try to launch directly with a fallback.
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (!launched) {
+          debugPrint('Could not launch ${p.tmdbLink}');
+        }
+      } catch (e) {
+        debugPrint('Error launching URL: $e');
+        // Final fallback: try without specifying mode
+        try {
+          await launchUrl(uri);
+        } catch (e2) {
+          debugPrint('Final fallback failed: $e2');
+        }
+      }
     },
-    child: Container(
-      width: 45,
-      height: 45,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        image: DecorationImage(
-          image: NetworkImage(p.logoUrl),
-          fit: BoxFit.cover,
+    borderRadius: BorderRadius.circular(12),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            image: DecorationImage(
+              image: NetworkImage(p.logoUrl),
+              fit: BoxFit.cover,
+            ),
+          ),
         ),
-      ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 60,
+          child: Text(
+            p.name,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.outfit(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }

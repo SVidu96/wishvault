@@ -50,8 +50,25 @@ class MovieSearchService implements SearchService {
     try {
       final int movieId = int.parse(apiId);
       final Map results = await _tmdb.v3.movies.getWatchProviders(movieId);
+      return _parseWatchProviders(results);
+    } catch (e) {
+      debugPrint('Movie Watch Providers Error: $e');
+      return {};
+    }
+  }
+
+  Map<String, dynamic> _parseWatchProviders(Map results) {
+    try {
       final Map allResults = results['results'] ?? {};
-      final Map regionData = allResults['US'] ?? {};
+
+      // Try US first, then any available region as fallback
+      Map regionData = allResults['US'] ?? {};
+      if (regionData.isEmpty && allResults.isNotEmpty) {
+        regionData = allResults.values.first;
+      }
+
+      if (regionData.isEmpty) return {};
+
       final String tmdbLink = regionData['link'] ?? '';
 
       List<WatchProvider> parseList(String key) {
@@ -121,6 +138,17 @@ class TvSearchService extends MovieSearchService {
   }
 
   @override
+  Future<Map<String, dynamic>> getDynamicContent(String apiId) async {
+    try {
+      final Map results = await _tmdb.v3.tv.getWatchProviders(apiId);
+      return _parseWatchProviders(results);
+    } catch (e) {
+      debugPrint('TV Watch Providers Error: $e');
+      return {};
+    }
+  }
+
+  @override
   MediaItemModel _mapToMediaItem(Map item) {
     final base = super._mapToMediaItem(item);
     return MediaItemModel(
@@ -139,9 +167,9 @@ class BookSearchService implements SearchService {
   @override
   Future<List<MediaItemModel>> search(String query) async {
     try {
-      final response = await http.get(
-        Uri.parse('https://www.googleapis.com/books/v1/volumes?q=$query'),
-      );
+      final url =
+          'https://www.googleapis.com/books/v1/volumes?q=$query${Env.googleBooksApiKey.isNotEmpty ? '&key=${Env.googleBooksApiKey}' : ''}';
+      final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(
           response.statusCode == 200 ? response.body : '{}',
@@ -158,9 +186,9 @@ class BookSearchService implements SearchService {
   @override
   Future<MediaItemModel?> getDetails(String id) async {
     try {
-      final response = await http.get(
-        Uri.parse('https://www.googleapis.com/books/v1/volumes/$id'),
-      );
+      final url =
+          'https://www.googleapis.com/books/v1/volumes/$id${Env.googleBooksApiKey.isNotEmpty ? '?key=${Env.googleBooksApiKey}' : ''}';
+      final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         return _mapToMediaItem(json.decode(response.body));
       }
@@ -171,7 +199,108 @@ class BookSearchService implements SearchService {
   }
 
   @override
-  Future<Map<String, dynamic>> getDynamicContent(String apiId) async => {};
+  Future<Map<String, dynamic>> getDynamicContent(String apiId) async {
+    try {
+      final details = await getDetails(apiId);
+      if (details == null) return {};
+
+      final data = details.extraData ?? {};
+      final saleInfo = data['saleInfo'] ?? {};
+      final accessInfo = data['accessInfo'] ?? {};
+      final info = data['volumeInfo'] ?? {};
+
+      List<WatchProvider> buyList = [];
+      List<WatchProvider> readList = [];
+      List<WatchProvider> rentList = [];
+
+      String ensureHttps(String url) {
+        if (url.startsWith('http://')) {
+          return url.replaceFirst('http://', 'https://');
+        }
+        return url;
+      }
+
+      // Google Play Books - Buy
+      if (saleInfo['buyLink'] != null) {
+        buyList.add(
+          WatchProvider(
+            name: 'Google Play',
+            logoUrl:
+                'https://www.gstatic.com/images/branding/product/2x/play_books_48dp.png',
+            tmdbLink: ensureHttps(saleInfo['buyLink']),
+          ),
+        );
+      }
+
+      // Google Play Books - Rent (if available in offers)
+      final List? offers = saleInfo['offers'];
+      if (offers != null && offers.any((o) => o['finskyOfferType'] == 3)) {
+        if (saleInfo['buyLink'] != null) {
+          rentList.add(
+            WatchProvider(
+              name: 'Google Play',
+              logoUrl:
+                  'https://www.gstatic.com/images/branding/product/2x/play_books_48dp.png',
+              tmdbLink: ensureHttps(saleInfo['buyLink']),
+            ),
+          );
+        }
+      }
+
+      // External Providers via ISBN
+      final List? identifiers = info['industryIdentifiers'];
+      String? isbn13;
+      if (identifiers != null) {
+        for (var id in identifiers) {
+          if (id['type'] == 'ISBN_13') {
+            isbn13 = id['identifier'];
+            break;
+          }
+        }
+      }
+
+      if (isbn13 != null) {
+        buyList.add(
+          WatchProvider(
+            name: 'Amazon',
+            logoUrl: 'https://www.amazon.com/favicon.ico',
+            tmdbLink: 'https://www.amazon.com/s?k=$isbn13',
+          ),
+        );
+        buyList.add(
+          WatchProvider(
+            name: 'Barnes & Noble',
+            logoUrl: 'https://www.barnesandnoble.com/favicon.ico',
+            tmdbLink: 'https://www.barnesandnoble.com/s/$isbn13',
+          ),
+        );
+      }
+
+      // Read & Preview
+      String? readUrl = accessInfo['webReaderLink'] ?? info['previewLink'];
+      if (readUrl != null) {
+        readList.add(
+          WatchProvider(
+            name: 'Google Books',
+            logoUrl:
+                'https://www.gstatic.com/images/branding/product/2x/books_48dp.png',
+            tmdbLink: ensureHttps(readUrl),
+          ),
+        );
+      }
+
+      return {
+        'book_providers': {
+          if (readList.isNotEmpty) 'Read & Preview': readList,
+          if (buyList.isNotEmpty) 'Buy': buyList,
+          if (rentList.isNotEmpty) 'Rent': rentList,
+        },
+      };
+    } catch (e) {
+      debugPrint('Book Dynamic Content Error: $e');
+      return {};
+    }
+  }
 
   MediaItemModel _mapToMediaItem(Map data) {
     final info = data['volumeInfo'] ?? {};

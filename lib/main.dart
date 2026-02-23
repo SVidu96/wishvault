@@ -59,17 +59,21 @@ class _MyAppState extends State<MyApp> {
   void _handleDeepLink(Uri uri) async {
     debugPrint('Incoming Deep Link: $uri');
 
-    // MOVIE LINKS
-    // Production: https://[domain]/movie?id=xxx&type=xxx
-    // Testing: wishvault://movie?id=xxx&type=xxx
-    bool isMovieWeb = uri.host == Env.appDomain && uri.path.contains('movie');
-    bool isMovieCustom = uri.scheme == 'wishvault' && uri.host == 'movie';
+    // ITEM LINKS (Movies, Books, TV, etc.)
+    // Production: https://[domain]/item?id=xxx&type=xxx (or legacy /movie)
+    // Testing: wishvault://item?id=xxx&type=xxx
+    bool isItemWeb =
+        uri.host == Env.appDomain &&
+        (uri.path.contains('item') || uri.path.contains('movie'));
+    bool isItemCustom =
+        uri.scheme == 'wishvault' &&
+        (uri.host == 'item' || uri.host == 'movie');
 
-    if (isMovieWeb || isMovieCustom) {
+    if (isItemWeb || isItemCustom) {
       final String? id = uri.queryParameters['id'];
       final String? typeStr = uri.queryParameters['type'];
       if (id != null) {
-        _navigateToMovie(id, WishListType.fromString(typeStr ?? 'movies'));
+        _navigateToItem(id, WishListType.fromString(typeStr ?? 'movies'));
       }
       return;
     }
@@ -101,7 +105,7 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  Future<void> _navigateToMovie(String id, WishListType type) async {
+  Future<void> _navigateToItem(String id, WishListType type) async {
     final searchService = SearchServiceFactory.getService(type);
     final media = await searchService.getDetails(id);
 
