@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/wishlist_model.dart';
 
@@ -13,7 +14,7 @@ class WishListService {
           .doc(wishList.id)
           .set(wishList.toMap());
     } catch (e) {
-      print('Error creating wish list: $e');
+      debugPrint('Error: $e');
       rethrow;
     }
   }
@@ -49,6 +50,16 @@ class WishListService {
     return WishListModel.fromMap(snapshot.docs.first.data());
   }
 
+  // Get wish list by ID
+  Future<WishListModel?> getWishListById(String wishListId) async {
+    final doc = await _firestore
+        .collection(collectionPath)
+        .doc(wishListId)
+        .get();
+    if (!doc.exists) return null;
+    return WishListModel.fromMap(doc.data()!);
+  }
+
   // Update a wish list title
   Future<void> updateWishListTitle(String wishListId, String newTitle) async {
     try {
@@ -56,7 +67,7 @@ class WishListService {
         'title': newTitle,
       });
     } catch (e) {
-      print('Error updating wish list title: $e');
+      debugPrint('Error updating wish list title: $e');
       rethrow;
     }
   }
@@ -66,7 +77,7 @@ class WishListService {
     try {
       await _firestore.collection(collectionPath).doc(wishListId).delete();
     } catch (e) {
-      print('Error deleting wish list: $e');
+      debugPrint('Error deleting wish list: $e');
       rethrow;
     }
   }

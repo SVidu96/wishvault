@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum WishListType {
@@ -22,6 +23,23 @@ enum WishListType {
         return 'Places';
       case WishListType.other:
         return 'Other';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case WishListType.movies:
+        return Icons.movie_rounded;
+      case WishListType.tvSeries:
+        return Icons.live_tv_rounded;
+      case WishListType.books:
+        return Icons.menu_book_rounded;
+      case WishListType.restaurants:
+        return Icons.restaurant_rounded;
+      case WishListType.places:
+        return Icons.place_rounded;
+      case WishListType.other:
+        return Icons.more_horiz_rounded;
     }
   }
 

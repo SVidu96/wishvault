@@ -4,8 +4,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:app_links/app_links.dart';
 import 'firebase_options.dart';
 import 'widgets/auth_wrapper.dart';
-import 'screens/media_item_detail_screen.dart';
 import 'services/search_service.dart';
+import 'services/wishlist_service.dart';
+import 'screens/media_item_detail_screen.dart';
+import 'screens/wishlist_detail_screen.dart';
 import 'core/config/env.dart';
 import 'models/wishlist_model.dart';
 
@@ -55,20 +57,47 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _handleDeepLink(Uri uri) async {
-    print('Incoming Deep Link: $uri');
+    debugPrint('Incoming Deep Link: $uri');
 
+    // MOVIE LINKS
     // Production: https://[domain]/movie?id=xxx&type=xxx
     // Testing: wishvault://movie?id=xxx&type=xxx
-    bool isWebLink = uri.host == Env.appDomain && uri.path.contains('movie');
-    bool isCustomScheme = uri.scheme == 'wishvault' && uri.host == 'movie';
+    bool isMovieWeb = uri.host == Env.appDomain && uri.path.contains('movie');
+    bool isMovieCustom = uri.scheme == 'wishvault' && uri.host == 'movie';
 
-    if (isWebLink || isCustomScheme) {
+    if (isMovieWeb || isMovieCustom) {
       final String? id = uri.queryParameters['id'];
       final String? typeStr = uri.queryParameters['type'];
-
       if (id != null) {
         _navigateToMovie(id, WishListType.fromString(typeStr ?? 'movies'));
       }
+      return;
+    }
+
+    // LIST LINKS
+    // Production: https://[domain]/list?id=xxx
+    // Testing: wishvault://list?id=xxx
+    bool isListWeb = uri.host == Env.appDomain && uri.path.contains('list');
+    bool isListCustom = uri.scheme == 'wishvault' && uri.host == 'list';
+
+    if (isListWeb || isListCustom) {
+      final String? id = uri.queryParameters['id'];
+      if (id != null) {
+        _navigateToList(id);
+      }
+    }
+  }
+
+  Future<void> _navigateToList(String id) async {
+    final wishListService = WishListService();
+    final wishList = await wishListService.getWishListById(id);
+
+    if (wishList != null && navigatorKey.currentState != null) {
+      navigatorKey.currentState!.push(
+        MaterialPageRoute(
+          builder: (context) => WishListDetailScreen(wishList: wishList),
+        ),
+      );
     }
   }
 

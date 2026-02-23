@@ -124,7 +124,9 @@ Widget _buildBadge(BuildContext context, IconData icon, String text) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.5),
+      color: Theme.of(
+        context,
+      ).colorScheme.secondaryContainer.withValues(alpha: 0.5),
       borderRadius: BorderRadius.circular(12),
     ),
     child: Row(

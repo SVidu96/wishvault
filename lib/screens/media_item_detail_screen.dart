@@ -331,9 +331,11 @@ class _MediaItemDetailScreenState extends State<MediaItemDetailScreen> {
                               widget.item!.id,
                               review: _reviewController.text,
                             );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Saved!')),
-                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Saved!')),
+                              );
+                            }
                           }
                         },
                         icon: const Icon(Icons.save_rounded),

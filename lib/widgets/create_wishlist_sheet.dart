@@ -30,23 +30,6 @@ class _CreateWishListSheetState extends State<CreateWishListSheet> {
     super.dispose();
   }
 
-  IconData _getIconForType(WishListType type) {
-    switch (type) {
-      case WishListType.movies:
-        return Icons.movie_rounded;
-      case WishListType.tvSeries:
-        return Icons.live_tv_rounded;
-      case WishListType.books:
-        return Icons.menu_book_rounded;
-      case WishListType.restaurants:
-        return Icons.restaurant_rounded;
-      case WishListType.places:
-        return Icons.place_rounded;
-      case WishListType.other:
-        return Icons.more_horiz_rounded;
-    }
-  }
-
   Future<void> _createList() async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
@@ -70,6 +53,7 @@ class _CreateWishListSheetState extends State<CreateWishListSheet> {
       await _wishListService.createWishList(newList);
       widget.onCreated();
     } catch (e) {
+      debugPrint('Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -162,7 +146,7 @@ class _CreateWishListSheetState extends State<CreateWishListSheet> {
                         : FontWeight.normal,
                   ),
                   avatar: Icon(
-                    _getIconForType(type),
+                    type.icon,
                     size: 16,
                     color: isSelected
                         ? Theme.of(context).colorScheme.primary

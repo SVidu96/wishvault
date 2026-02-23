@@ -3,6 +3,7 @@ import '../models/wishlist_model.dart';
 import '../core/config/env.dart';
 import '../models/watch_provider_model.dart';
 import 'package:tmdb_api/tmdb_api.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -148,7 +149,9 @@ class BookSearchService implements SearchService {
         final List items = data['items'] ?? [];
         return items.map((item) => _mapToMediaItem(item)).toList();
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('Books Search Error: $e');
+    }
     return [];
   }
 
@@ -161,7 +164,9 @@ class BookSearchService implements SearchService {
       if (response.statusCode == 200) {
         return _mapToMediaItem(json.decode(response.body));
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('Book Details Error: $e');
+    }
     return null;
   }
 

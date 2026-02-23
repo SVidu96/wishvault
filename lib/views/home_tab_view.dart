@@ -15,7 +15,9 @@ class HomeTabView extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+            Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withValues(alpha: 0.3),
             Theme.of(context).colorScheme.surface,
           ],
         ),
@@ -36,7 +38,7 @@ class HomeTabView extends StatelessWidget {
                       BoxShadow(
                         color: Theme.of(
                           context,
-                        ).colorScheme.primary.withOpacity(0.3),
+                        ).colorScheme.primary.withValues(alpha: 0.3),
                         blurRadius: 20,
                         spreadRadius: 5,
                       ),
